@@ -270,7 +270,7 @@ static void print_json_flat_value(MmsValue* value, const char* name, MmsError er
     printf("\n        }");
 }
 
-static const char* ignore_vars[] = { "Bilateral_Table_ID", /* weitere Namen, oder löschen */ NULL };
+static const char* ignore_vars[] = { "Bilateral_Table_ID", /* more names, or remove */ NULL };
 
 static int is_ignored(const char* name) {
     for (int i = 0; ignore_vars[i] != NULL; ++i) {
@@ -381,11 +381,29 @@ static void print_server_identity_json(MmsConnection con)
     }
 }
 
+static void print_help(const char* prog_name) {
+    printf("Usage: %s [hostname [port]]\n", prog_name);
+    printf("Query an MMS server and print information as JSON.\n\n");
+    printf("Options:\n");
+    printf("  --help        Print this help message and exit.\n");
+    printf("\n");
+    printf("Arguments:\n");
+    printf("  hostname      IP address or hostname of the server (default: localhost)\n");
+    printf("  tcp port      TCP port to connect (default: 102)\n");
+}
+
 int main(int argc, char** argv) {
     char* hostname = NULL;
     int tcpPort = 102;
     MmsError error;
     int returnCode = 0;
+
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--help") == 0) {
+            print_help(argv[0]);
+            return EXIT_SUCCESS;
+        }
+    }
 
     if (argc > 1) {
         hostname = argv[1];
