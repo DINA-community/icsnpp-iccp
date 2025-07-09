@@ -15,64 +15,16 @@ static void print_json_string(const char* str) {
     putchar('"');
 }
 
-static const char* mms_error_to_string(MmsError e)
-{
-    switch (e) {
-        case MMS_ERROR_NONE: return "MMS_ERROR_NONE";
-        case MMS_ERROR_CONNECTION_REJECTED: return "MMS_ERROR_CONNECTION_REJECTED";
-        case MMS_ERROR_CONNECTION_LOST: return "MMS_ERROR_CONNECTION_LOST";
-        case MMS_ERROR_SERVICE_TIMEOUT: return "MMS_ERROR_SERVICE_TIMEOUT";
-        case MMS_ERROR_PARSING_RESPONSE: return "MMS_ERROR_PARSING_RESPONSE";
-        case MMS_ERROR_HARDWARE_FAULT: return "MMS_ERROR_HARDWARE_FAULT";
-        case MMS_ERROR_CONCLUDE_REJECTED: return "MMS_ERROR_CONCLUDE_REJECTED";
-        case MMS_ERROR_INVALID_ARGUMENTS: return "MMS_ERROR_INVALID_ARGUMENTS";
-        case MMS_ERROR_OUTSTANDING_CALL_LIMIT: return "MMS_ERROR_OUTSTANDING_CALL_LIMIT";
-        case MMS_ERROR_OTHER: return "MMS_ERROR_OTHER";
-        case MMS_ERROR_VMDSTATE_OTHER: return "MMS_ERROR_VMDSTATE_OTHER";
-        case MMS_ERROR_APPLICATION_REFERENCE_OTHER: return "MMS_ERROR_APPLICATION_REFERENCE_OTHER";
-        case MMS_ERROR_DEFINITION_OTHER: return "MMS_ERROR_DEFINITION_OTHER";
-        case MMS_ERROR_DEFINITION_INVALID_ADDRESS: return "MMS_ERROR_DEFINITION_INVALID_ADDRESS";
-        case MMS_ERROR_DEFINITION_TYPE_UNSUPPORTED: return "MMS_ERROR_DEFINITION_TYPE_UNSUPPORTED";
-        case MMS_ERROR_DEFINITION_TYPE_INCONSISTENT: return "MMS_ERROR_DEFINITION_TYPE_INCONSISTENT";
-        case MMS_ERROR_DEFINITION_OBJECT_UNDEFINED: return "MMS_ERROR_DEFINITION_OBJECT_UNDEFINED";
-        case MMS_ERROR_DEFINITION_OBJECT_EXISTS: return "MMS_ERROR_DEFINITION_OBJECT_EXISTS";
-        case MMS_ERROR_DEFINITION_OBJECT_ATTRIBUTE_INCONSISTENT: return "MMS_ERROR_DEFINITION_OBJECT_ATTRIBUTE_INCONSISTENT";
-        case MMS_ERROR_RESOURCE_OTHER: return "MMS_ERROR_RESOURCE_OTHER";
-        case MMS_ERROR_RESOURCE_CAPABILITY_UNAVAILABLE: return "MMS_ERROR_RESOURCE_CAPABILITY_UNAVAILABLE";
-        case MMS_ERROR_SERVICE_OTHER: return "MMS_ERROR_SERVICE_OTHER";
-        case MMS_ERROR_SERVICE_OBJECT_CONSTRAINT_CONFLICT: return "MMS_ERROR_SERVICE_OBJECT_CONSTRAINT_CONFLICT";
-        case MMS_ERROR_SERVICE_PREEMPT_OTHER: return "MMS_ERROR_SERVICE_PREEMPT_OTHER";
-        case MMS_ERROR_TIME_RESOLUTION_OTHER: return "MMS_ERROR_TIME_RESOLUTION_OTHER";
-        case MMS_ERROR_ACCESS_OTHER: return "MMS_ERROR_ACCESS_OTHER";
-        case MMS_ERROR_ACCESS_OBJECT_NON_EXISTENT: return "MMS_ERROR_ACCESS_OBJECT_NON_EXISTENT";
-        case MMS_ERROR_ACCESS_OBJECT_ACCESS_UNSUPPORTED: return "MMS_ERROR_ACCESS_OBJECT_ACCESS_UNSUPPORTED";
-        case MMS_ERROR_ACCESS_OBJECT_ACCESS_DENIED: return "MMS_ERROR_ACCESS_OBJECT_ACCESS_DENIED";
-        case MMS_ERROR_ACCESS_OBJECT_INVALIDATED: return "MMS_ERROR_ACCESS_OBJECT_INVALIDATED";
-        case MMS_ERROR_ACCESS_OBJECT_VALUE_INVALID: return "MMS_ERROR_ACCESS_OBJECT_VALUE_INVALID";
-        case MMS_ERROR_ACCESS_TEMPORARILY_UNAVAILABLE: return "MMS_ERROR_ACCESS_TEMPORARILY_UNAVAILABLE";
-        case MMS_ERROR_FILE_OTHER: return "MMS_ERROR_FILE_OTHER";
-        case MMS_ERROR_FILE_FILENAME_AMBIGUOUS: return "MMS_ERROR_FILE_FILENAME_AMBIGUOUS";
-        case MMS_ERROR_FILE_FILE_BUSY: return "MMS_ERROR_FILE_FILE_BUSY";
-        case MMS_ERROR_FILE_FILENAME_SYNTAX_ERROR: return "MMS_ERROR_FILE_FILENAME_SYNTAX_ERROR";
-        case MMS_ERROR_FILE_CONTENT_TYPE_INVALID: return "MMS_ERROR_FILE_CONTENT_TYPE_INVALID";
-        case MMS_ERROR_FILE_POSITION_INVALID: return "MMS_ERROR_FILE_POSITION_INVALID";
-        case MMS_ERROR_FILE_FILE_ACCESS_DENIED: return "MMS_ERROR_FILE_FILE_ACCESS_DENIED";
-        case MMS_ERROR_FILE_FILE_NON_EXISTENT: return "MMS_ERROR_FILE_FILE_NON_EXISTENT";
-        case MMS_ERROR_FILE_DUPLICATE_FILENAME: return "MMS_ERROR_FILE_DUPLICATE_FILENAME";
-        case MMS_ERROR_FILE_INSUFFICIENT_SPACE_IN_FILESTORE: return "MMS_ERROR_FILE_INSUFFICIENT_SPACE_IN_FILESTORE";
-        case MMS_ERROR_REJECT_OTHER: return "MMS_ERROR_REJECT_OTHER";
-        case MMS_ERROR_REJECT_UNKNOWN_PDU_TYPE: return "MMS_ERROR_REJECT_UNKNOWN_PDU_TYPE";
-        case MMS_ERROR_REJECT_INVALID_PDU: return "MMS_ERROR_REJECT_INVALID_PDU";
-        case MMS_ERROR_REJECT_UNRECOGNIZED_SERVICE: return "MMS_ERROR_REJECT_UNRECOGNIZED_SERVICE";
-        case MMS_ERROR_REJECT_UNRECOGNIZED_MODIFIER: return "MMS_ERROR_REJECT_UNRECOGNIZED_MODIFIER";
-        case MMS_ERROR_REJECT_REQUEST_INVALID_ARGUMENT: return "MMS_ERROR_REJECT_REQUEST_INVALID_ARGUMENT";
-        default: return "MMS_ERROR_UNKNOWN";
-    }
-}
+static void print_connection_error_and_exit(const char* hostname, int port, MmsError error, MmsConnection connection, const char* what) {
+    if (what && *what)
+        fprintf(stderr, "Error: %s at MMS server %s:%d.\n", what, hostname, port);
+    else
+        fprintf(stderr, "Error: Failed to connect to MMS server at %s:%d.\n", hostname, port);
 
-static void print_connection_error_and_exit(const char* hostname, int port, MmsError error, MmsConnection connection) {
-    fprintf(stderr, "Error: Failed to connect to MMS server at %s:%d.\n", hostname, port);
     switch (error) {
+        case MMS_ERROR_NONE:
+            fprintf(stderr, "  Unknown error: No error reported but operation failed.\n");
+            break;
         case MMS_ERROR_CONNECTION_REJECTED:
             fprintf(stderr, "  Reason: Connection was rejected by the remote MMS server.\n");
             break;
@@ -80,10 +32,10 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Connection was established but then lost unexpectedly.\n");
             break;
         case MMS_ERROR_SERVICE_TIMEOUT:
-            fprintf(stderr, "  Reason: Connection timed out while waiting for a response from the server.\n");
+            fprintf(stderr, "  Reason: Operation timed out while waiting for a response from the server.\n");
             break;
         case MMS_ERROR_PARSING_RESPONSE:
-            fprintf(stderr, "  Reason: Failed to parse the server response during handshake or connection.\n");
+            fprintf(stderr, "  Reason: Failed to parse the server response.\n");
             break;
         case MMS_ERROR_HARDWARE_FAULT:
             fprintf(stderr, "  Reason: A hardware fault occurred (server-side or client-side).\n");
@@ -98,7 +50,7 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Outstanding call limit exceeded on the connection.\n");
             break;
         case MMS_ERROR_OTHER:
-            fprintf(stderr, "  Reason: Unspecified error occurred while connecting.\n");
+            fprintf(stderr, "  Reason: Unspecified error occurred during MMS communication.\n");
             break;
         case MMS_ERROR_VMDSTATE_OTHER:
             fprintf(stderr, "  Reason: Error related to remote VMD state.\n");
@@ -113,10 +65,10 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Invalid address definition in MMS protocol.\n");
             break;
         case MMS_ERROR_DEFINITION_TYPE_UNSUPPORTED:
-            fprintf(stderr, "  Reason: Unsupported data type encountered by connection.\n");
+            fprintf(stderr, "  Reason: Unsupported data type encountered by operation.\n");
             break;
         case MMS_ERROR_DEFINITION_TYPE_INCONSISTENT:
-            fprintf(stderr, "  Reason: Inconsistent data type in communication setup.\n");
+            fprintf(stderr, "  Reason: Inconsistent data type in communication.\n");
             break;
         case MMS_ERROR_DEFINITION_OBJECT_UNDEFINED:
             fprintf(stderr, "  Reason: Requested object is undefined on server.\n");
@@ -134,7 +86,7 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Required capability is not available on MMS server or client.\n");
             break;
         case MMS_ERROR_SERVICE_OTHER:
-            fprintf(stderr, "  Reason: Generic service error occurred while connecting.\n");
+            fprintf(stderr, "  Reason: Generic service error occurred during operation.\n");
             break;
         case MMS_ERROR_SERVICE_OBJECT_CONSTRAINT_CONFLICT:
             fprintf(stderr, "  Reason: Object constraint conflict reported by server.\n");
@@ -143,7 +95,7 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Service was preempted by another operation.\n");
             break;
         case MMS_ERROR_TIME_RESOLUTION_OTHER:
-            fprintf(stderr, "  Reason: Error with time resolution during initial handshake.\n");
+            fprintf(stderr, "  Reason: Error with time resolution during operation.\n");
             break;
         case MMS_ERROR_ACCESS_OTHER:
             fprintf(stderr, "  Reason: Generic access error.\n");
@@ -167,7 +119,7 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Access temporarily unavailable. Try again later.\n");
             break;
         case MMS_ERROR_FILE_OTHER:
-            fprintf(stderr, "  Reason: Generic file service error during connection.\n");
+            fprintf(stderr, "  Reason: Generic file service error during operation.\n");
             break;
         case MMS_ERROR_FILE_FILENAME_AMBIGUOUS:
             fprintf(stderr, "  Reason: Provided filename is ambiguous.\n");
@@ -191,13 +143,13 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Requested file does not exist.\n");
             break;
         case MMS_ERROR_FILE_DUPLICATE_FILENAME:
-            fprintf(stderr, "  Reason: Duplicate filename found during connection.\n");
+            fprintf(stderr, "  Reason: Duplicate filename found during operation.\n");
             break;
         case MMS_ERROR_FILE_INSUFFICIENT_SPACE_IN_FILESTORE:
             fprintf(stderr, "  Reason: Insufficient space on the server filestore.\n");
             break;
         case MMS_ERROR_REJECT_OTHER:
-            fprintf(stderr, "  Reason: Generic rejection occurred during connection establishment.\n");
+            fprintf(stderr, "  Reason: Generic rejection occurred during operation.\n");
             break;
         case MMS_ERROR_REJECT_UNKNOWN_PDU_TYPE:
             fprintf(stderr, "  Reason: Received unknown PDU type from server.\n");
@@ -209,13 +161,10 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
             fprintf(stderr, "  Reason: Unrecognized service requested/negotiated.\n");
             break;
         case MMS_ERROR_REJECT_UNRECOGNIZED_MODIFIER:
-            fprintf(stderr, "  Reason: Unrecognized service modifier in MMS handshake.\n");
+            fprintf(stderr, "  Reason: Unrecognized service modifier in handshake.\n");
             break;
         case MMS_ERROR_REJECT_REQUEST_INVALID_ARGUMENT:
-            fprintf(stderr, "  Reason: Invalid argument found in handshake/init request.\n");
-            break;
-        case MMS_ERROR_NONE:
-            fprintf(stderr, "  Unknown error: MMS_ERROR_NONE reported but connection still failed.\n");
+            fprintf(stderr, "  Reason: Invalid argument found in request.\n");
             break;
         default:
             fprintf(stderr, "  Reason: Unrecognized MMS error code (%d).\n", (int)error);
@@ -422,7 +371,7 @@ static void print_json_flat_value(MmsValue* value, const char* name, MmsError er
         printf(",\n          \"type\": \"unknown\"");
         printf(",\n          \"mms_type\": \"unknown\"");
         printf(",\n          \"error\": ");
-        print_json_string(mms_error_to_string(error_code));
+        printf("\"MMS error code %d\"", error_code);
     }
     printf("\n        }");
 }
@@ -520,8 +469,7 @@ static void print_tase2_version_as_string(MmsValue* value)
     print_value_as_string(value);
 }
 
-static void print_server_identity_json(MmsConnection con)
-{
+static void print_server_identity_json(MmsConnection con, const char* hostname, int port) {
     MmsError error;
     MmsServerIdentity* id = MmsConnection_identify(con, &error);
     printf("  \"server_identity\": ");
@@ -535,6 +483,7 @@ static void print_server_identity_json(MmsConnection con)
         printf("\n  },\n");
     } else {
         printf("null,\n");
+        print_connection_error_and_exit(hostname, port, error, con, "Failed to retrieve server identity");
     }
 }
 
@@ -601,32 +550,38 @@ int main(int argc, char** argv) {
     }
 
     if (!MmsConnection_connect(con, &error, hostname, tcpPort)) {
-        print_connection_error_and_exit(hostname, tcpPort, error, con);
+        print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to establish MMS connection");
     }
 
     printf("{\n");
 
-    print_server_identity_json(con);
+    print_server_identity_json(con, hostname, tcpPort);
 
     MmsValue* tase2v = MmsConnection_readVariable(con, &error, NULL, "TASE2_Version");
+    if (error != MMS_ERROR_NONE || tase2v == NULL) {
+        print_connection_error_and_exit(hostname, tcpPort, error, con, "Reading variable 'TASE2_Version' failed");
+    }
+
     MmsValue* tase2sf = MmsConnection_readVariable(con, &error, NULL, "Supported_Features");
+    if (error != MMS_ERROR_NONE || tase2sf == NULL) {
+        print_connection_error_and_exit(hostname, tcpPort, error, con, "Reading variable 'Supported_Features' failed");
+    }
 
     printf("  \"TASE2_Version\": ");
-    if (tase2v) print_tase2_version_as_string(tase2v); else printf("null");
-    if (tase2v) MmsValue_delete(tase2v);
+    print_tase2_version_as_string(tase2v);
+    MmsValue_delete(tase2v);
     printf(",\n");
 
     printf("  \"Supported_Features\": ");
-    if (tase2sf) print_main_value(tase2sf); else printf("null");
-    if (tase2sf) MmsValue_delete(tase2sf);
+    print_main_value(tase2sf);
+    MmsValue_delete(tase2sf);
     printf(",\n");
 
     printf("  \"domains\": [\n");
 
     LinkedList domains = MmsConnection_getDomainNames(con, &error);
     if (error != MMS_ERROR_NONE || domains == NULL) {
-        fprintf(stderr, "\"error\": \"domain-list failed\"}\n");
-        goto cleanup;
+        print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to retrieve domain-list");
     }
 
     LinkedList domainElem = LinkedList_getNext(domains);
@@ -641,6 +596,9 @@ int main(int argc, char** argv) {
         print_json_string(domainName);
 
         MmsValue* bilateral_table_id_val = MmsConnection_readVariable(con, &error, domainName, "Bilateral_Table_ID");
+        if (error != MMS_ERROR_NONE) {
+            print_connection_error_and_exit(hostname, tcpPort, error, con, "Reading variable 'Bilateral_Table_ID' failed");
+        }
         printf(",\n      \"bilateral_table_id\": ");
         if (bilateral_table_id_val) {
             print_main_value(bilateral_table_id_val);
@@ -652,6 +610,10 @@ int main(int argc, char** argv) {
         printf(",\n      \"variables\": [\n");
 
         LinkedList variables = MmsConnection_getDomainVariableNames(con, &error, domainName);
+        if (error != MMS_ERROR_NONE || variables == NULL) {
+            print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to retrieve variable-list");
+        }
+
         LinkedList varElem = LinkedList_getNext(variables);
         int firstVar = 1;
         while (varElem != NULL) {
@@ -665,6 +627,10 @@ int main(int argc, char** argv) {
 
             MmsError localErr = MMS_ERROR_NONE;
             MmsValue* value = MmsConnection_readVariable(con, &localErr, domainName, varName);
+
+            if (localErr != MMS_ERROR_NONE) {
+                print_connection_error_and_exit(hostname, tcpPort, localErr, con, varName);
+            }
 
             print_json_flat_value(value, varName, localErr);
 
