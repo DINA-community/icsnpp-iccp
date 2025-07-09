@@ -4,6 +4,7 @@
 #include <strings.h>
 #include <libiec61850/iec61850_common.h>
 #include <libiec61850/mms_client_connection.h>
+#include <libiec61850/iso_connection_parameters.h>
 
 static void print_json_string(const char* str) {
     putchar('"');
@@ -538,10 +539,11 @@ static void print_server_identity_json(MmsConnection con)
 }
 
 static void print_help(const char* prog_name) {
-    printf("Usage: %s [hostname [port]]\n", prog_name);
+    printf("Usage: %s [--password PASSWORD] [hostname [port]]\n", prog_name);
     printf("Query an MMS server and print information as JSON.\n\n");
     printf("Options:\n");
     printf("  --help        Print this help message and exit.\n");
+    printf("  --password    Set the password for ACSE password authentication.\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  hostname      IP address or hostname of the server (default: localhost)\n");
@@ -551,30 +553,53 @@ static void print_help(const char* prog_name) {
 int main(int argc, char** argv) {
     char* hostname = NULL;
     int tcpPort = 102;
+    char* password = NULL;
     MmsError error;
     int returnCode = 0;
 
-    for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--help") == 0) {
+    int argidx = 1;
+    while (argidx < argc) {
+        if (strcmp(argv[argidx], "--help") == 0) {
             print_help(argv[0]);
             return EXIT_SUCCESS;
-        }
-    }
-
-    if (argc > 1) {
-        hostname = argv[1];
-        if (argc > 2) {
-            tcpPort = atoi(argv[2]);
-            if (tcpPort <= 0 || tcpPort > 65535) {
-                fprintf(stderr, "invalid tcp port: %s\n", argv[2]);
+        } else if (strcmp(argv[argidx], "--password") == 0) {
+            if ((argidx + 1) < argc) {
+                password = argv[argidx + 1];
+                argidx += 2;
+            } else {
+                fprintf(stderr, "Error: --password requires a value.\n");
                 return EXIT_FAILURE;
             }
+        } else if (argv[argidx][0] == '-') {
+            fprintf(stderr, "Unknown option: %s\n", argv[argidx]);
+            return EXIT_FAILURE;
+        } else {
+            break;
         }
-    } else {
-        hostname = "localhost";
     }
+    if (argidx < argc) {
+        hostname = argv[argidx++];
+    }
+    if (argidx < argc) {
+        tcpPort = atoi(argv[argidx]);
+        if (tcpPort <= 0 || tcpPort > 65535) {
+            fprintf(stderr, "invalid tcp port: %s\n", argv[argidx]);
+            return EXIT_FAILURE;
+        }
+    }
+    if (!hostname)
+        hostname = "localhost";
 
     MmsConnection con = MmsConnection_create();
+
+    if (password != NULL && strlen(password) > 0) {
+        IsoConnectionParameters params = MmsConnection_getIsoConnectionParameters(con);
+        AcseAuthenticationParameter acseParam = AcseAuthenticationParameter_create();
+        AcseAuthenticationParameter_setAuthMechanism(acseParam, ACSE_AUTH_PASSWORD);
+        AcseAuthenticationParameter_setPassword(acseParam, password);
+        IsoConnectionParameters_setAcseAuthenticationParameter(params, acseParam);
+    }
+
     if (!MmsConnection_connect(con, &error, hostname, tcpPort)) {
         print_connection_error_and_exit(hostname, tcpPort, error, con);
     }
@@ -655,7 +680,19 @@ int main(int argc, char** argv) {
     LinkedList_destroy(domains);
 
 cleanup:
-    MmsConnection_destroy(con);
+    if (con) {
+        IsoConnectionParameters params = MmsConnection_getIsoConnectionParameters(con);
+        if (params && password) {
+            // Destroy the authentication parameter if set (avoid leak)
+            AcseAuthenticationParameter acseParam = NULL;
+            acseParam = params->acseAuthParameter;
+            if (acseParam) {
+                AcseAuthenticationParameter_destroy(acseParam);
+                params->acseAuthParameter = NULL;
+            }
+        }
+        MmsConnection_destroy(con);
+    }
     return returnCode;
 }
 
