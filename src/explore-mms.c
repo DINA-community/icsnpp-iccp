@@ -69,6 +69,162 @@ static const char* mms_error_to_string(MmsError e)
     }
 }
 
+static void print_connection_error_and_exit(const char* hostname, int port, MmsError error, MmsConnection connection) {
+    fprintf(stderr, "Error: Failed to connect to MMS server at %s:%d.\n", hostname, port);
+    switch (error) {
+        case MMS_ERROR_CONNECTION_REJECTED:
+            fprintf(stderr, "  Reason: Connection was rejected by the remote MMS server.\n");
+            break;
+        case MMS_ERROR_CONNECTION_LOST:
+            fprintf(stderr, "  Reason: Connection was established but then lost unexpectedly.\n");
+            break;
+        case MMS_ERROR_SERVICE_TIMEOUT:
+            fprintf(stderr, "  Reason: Connection timed out while waiting for a response from the server.\n");
+            break;
+        case MMS_ERROR_PARSING_RESPONSE:
+            fprintf(stderr, "  Reason: Failed to parse the server response during handshake or connection.\n");
+            break;
+        case MMS_ERROR_HARDWARE_FAULT:
+            fprintf(stderr, "  Reason: A hardware fault occurred (server-side or client-side).\n");
+            break;
+        case MMS_ERROR_CONCLUDE_REJECTED:
+            fprintf(stderr, "  Reason: Server rejected connection conclude operation.\n");
+            break;
+        case MMS_ERROR_INVALID_ARGUMENTS:
+            fprintf(stderr, "  Reason: Invalid arguments provided to connection API.\n");
+            break;
+        case MMS_ERROR_OUTSTANDING_CALL_LIMIT:
+            fprintf(stderr, "  Reason: Outstanding call limit exceeded on the connection.\n");
+            break;
+        case MMS_ERROR_OTHER:
+            fprintf(stderr, "  Reason: Unspecified error occurred while connecting.\n");
+            break;
+        case MMS_ERROR_VMDSTATE_OTHER:
+            fprintf(stderr, "  Reason: Error related to remote VMD state.\n");
+            break;
+        case MMS_ERROR_APPLICATION_REFERENCE_OTHER:
+            fprintf(stderr, "  Reason: Application reference problem reported by the server.\n");
+            break;
+        case MMS_ERROR_DEFINITION_OTHER:
+            fprintf(stderr, "  Reason: Problem with MMS definition at the peer.\n");
+            break;
+        case MMS_ERROR_DEFINITION_INVALID_ADDRESS:
+            fprintf(stderr, "  Reason: Invalid address definition in MMS protocol.\n");
+            break;
+        case MMS_ERROR_DEFINITION_TYPE_UNSUPPORTED:
+            fprintf(stderr, "  Reason: Unsupported data type encountered by connection.\n");
+            break;
+        case MMS_ERROR_DEFINITION_TYPE_INCONSISTENT:
+            fprintf(stderr, "  Reason: Inconsistent data type in communication setup.\n");
+            break;
+        case MMS_ERROR_DEFINITION_OBJECT_UNDEFINED:
+            fprintf(stderr, "  Reason: Requested object is undefined on server.\n");
+            break;
+        case MMS_ERROR_DEFINITION_OBJECT_EXISTS:
+            fprintf(stderr, "  Reason: Requested object already exists on server.\n");
+            break;
+        case MMS_ERROR_DEFINITION_OBJECT_ATTRIBUTE_INCONSISTENT:
+            fprintf(stderr, "  Reason: Inconsistent object attribute definition on server.\n");
+            break;
+        case MMS_ERROR_RESOURCE_OTHER:
+            fprintf(stderr, "  Reason: Resource-related error on server or client.\n");
+            break;
+        case MMS_ERROR_RESOURCE_CAPABILITY_UNAVAILABLE:
+            fprintf(stderr, "  Reason: Required capability is not available on MMS server or client.\n");
+            break;
+        case MMS_ERROR_SERVICE_OTHER:
+            fprintf(stderr, "  Reason: Generic service error occurred while connecting.\n");
+            break;
+        case MMS_ERROR_SERVICE_OBJECT_CONSTRAINT_CONFLICT:
+            fprintf(stderr, "  Reason: Object constraint conflict reported by server.\n");
+            break;
+        case MMS_ERROR_SERVICE_PREEMPT_OTHER:
+            fprintf(stderr, "  Reason: Service was preempted by another operation.\n");
+            break;
+        case MMS_ERROR_TIME_RESOLUTION_OTHER:
+            fprintf(stderr, "  Reason: Error with time resolution during initial handshake.\n");
+            break;
+        case MMS_ERROR_ACCESS_OTHER:
+            fprintf(stderr, "  Reason: Generic access error.\n");
+            break;
+        case MMS_ERROR_ACCESS_OBJECT_NON_EXISTENT:
+            fprintf(stderr, "  Reason: Attempted to access a non-existent object.\n");
+            break;
+        case MMS_ERROR_ACCESS_OBJECT_ACCESS_UNSUPPORTED:
+            fprintf(stderr, "  Reason: Access to requested object is unsupported by server.\n");
+            break;
+        case MMS_ERROR_ACCESS_OBJECT_ACCESS_DENIED:
+            fprintf(stderr, "  Reason: Access to requested object was denied by server.\n");
+            break;
+        case MMS_ERROR_ACCESS_OBJECT_INVALIDATED:
+            fprintf(stderr, "  Reason: Requested object is invalidated at the server.\n");
+            break;
+        case MMS_ERROR_ACCESS_OBJECT_VALUE_INVALID:
+            fprintf(stderr, "  Reason: Value of the accessed object is invalid.\n");
+            break;
+        case MMS_ERROR_ACCESS_TEMPORARILY_UNAVAILABLE:
+            fprintf(stderr, "  Reason: Access temporarily unavailable. Try again later.\n");
+            break;
+        case MMS_ERROR_FILE_OTHER:
+            fprintf(stderr, "  Reason: Generic file service error during connection.\n");
+            break;
+        case MMS_ERROR_FILE_FILENAME_AMBIGUOUS:
+            fprintf(stderr, "  Reason: Provided filename is ambiguous.\n");
+            break;
+        case MMS_ERROR_FILE_FILE_BUSY:
+            fprintf(stderr, "  Reason: Target file is currently busy and locked by the server.\n");
+            break;
+        case MMS_ERROR_FILE_FILENAME_SYNTAX_ERROR:
+            fprintf(stderr, "  Reason: Syntax error in provided filename.\n");
+            break;
+        case MMS_ERROR_FILE_CONTENT_TYPE_INVALID:
+            fprintf(stderr, "  Reason: Invalid file content type encountered.\n");
+            break;
+        case MMS_ERROR_FILE_POSITION_INVALID:
+            fprintf(stderr, "  Reason: Invalid file position specified.\n");
+            break;
+        case MMS_ERROR_FILE_FILE_ACCESS_DENIED:
+            fprintf(stderr, "  Reason: File access denied by server.\n");
+            break;
+        case MMS_ERROR_FILE_FILE_NON_EXISTENT:
+            fprintf(stderr, "  Reason: Requested file does not exist.\n");
+            break;
+        case MMS_ERROR_FILE_DUPLICATE_FILENAME:
+            fprintf(stderr, "  Reason: Duplicate filename found during connection.\n");
+            break;
+        case MMS_ERROR_FILE_INSUFFICIENT_SPACE_IN_FILESTORE:
+            fprintf(stderr, "  Reason: Insufficient space on the server filestore.\n");
+            break;
+        case MMS_ERROR_REJECT_OTHER:
+            fprintf(stderr, "  Reason: Generic rejection occurred during connection establishment.\n");
+            break;
+        case MMS_ERROR_REJECT_UNKNOWN_PDU_TYPE:
+            fprintf(stderr, "  Reason: Received unknown PDU type from server.\n");
+            break;
+        case MMS_ERROR_REJECT_INVALID_PDU:
+            fprintf(stderr, "  Reason: Received invalid PDU.\n");
+            break;
+        case MMS_ERROR_REJECT_UNRECOGNIZED_SERVICE:
+            fprintf(stderr, "  Reason: Unrecognized service requested/negotiated.\n");
+            break;
+        case MMS_ERROR_REJECT_UNRECOGNIZED_MODIFIER:
+            fprintf(stderr, "  Reason: Unrecognized service modifier in MMS handshake.\n");
+            break;
+        case MMS_ERROR_REJECT_REQUEST_INVALID_ARGUMENT:
+            fprintf(stderr, "  Reason: Invalid argument found in handshake/init request.\n");
+            break;
+        case MMS_ERROR_NONE:
+            fprintf(stderr, "  Unknown error: MMS_ERROR_NONE reported but connection still failed.\n");
+            break;
+        default:
+            fprintf(stderr, "  Reason: Unrecognized MMS error code (%d).\n", (int)error);
+            break;
+    }
+    if (connection)
+        MmsConnection_destroy(connection);
+    exit(EXIT_FAILURE);
+}
+
 static long decode_bitstring_as_int(MmsValue* value) {
     if (!value || MmsValue_getType(value) != MMS_BIT_STRING) return -1;
     int size = MmsValue_getBitStringByteSize(value);
@@ -420,9 +576,7 @@ int main(int argc, char** argv) {
 
     MmsConnection con = MmsConnection_create();
     if (!MmsConnection_connect(con, &error, hostname, tcpPort)) {
-        printf("{\n  \"server_identity\": null\n}\n");
-        MmsConnection_destroy(con);
-        return EXIT_FAILURE;
+        print_connection_error_and_exit(hostname, tcpPort, error, con);
     }
 
     printf("{\n");
