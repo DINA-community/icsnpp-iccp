@@ -280,7 +280,6 @@ static int is_ignored(const char* name) {
     return 0;
 }
 
-// --- Spezial: Wert als String ausgeben (wird von print_tase2_version_as_string für fallback genutzt) ---
 static void print_value_as_string(MmsValue* value)
 {
     if (!value) {
@@ -341,7 +340,6 @@ static void print_value_as_string(MmsValue* value)
     }
 }
 
-// ---- NEU: Spezialausgabe TASE2_Version ----
 static void print_tase2_version_as_string(MmsValue* value)
 {
     if (!value) {
@@ -362,11 +360,9 @@ static void print_tase2_version_as_string(MmsValue* value)
             return;
         }
     }
-    // Fallback (wie vorher):
     print_value_as_string(value);
 }
 
-// ---- NEU: Server-Identity als JSON-Objekt ----
 static void print_server_identity_json(MmsConnection con)
 {
     MmsError error;
@@ -386,10 +382,23 @@ static void print_server_identity_json(MmsConnection con)
 }
 
 int main(int argc, char** argv) {
-    char* hostname = (argc > 1) ? argv[1] : "localhost";
+    char* hostname = NULL;
     int tcpPort = 102;
     MmsError error;
     int returnCode = 0;
+
+    if (argc > 1) {
+        hostname = argv[1];
+        if (argc > 2) {
+            tcpPort = atoi(argv[2]);
+            if (tcpPort <= 0 || tcpPort > 65535) {
+                fprintf(stderr, "invalid tcp port: %s\n", argv[2]);
+                return EXIT_FAILURE;
+            }
+        }
+    } else {
+        hostname = "localhost";
+    }
 
     MmsConnection con = MmsConnection_create();
     if (!MmsConnection_connect(con, &error, hostname, tcpPort)) {
