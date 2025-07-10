@@ -1,8 +1,17 @@
-# explore-mms
+# ICSNPP-ICCP
+
+Industrial Control Systems Network Protocol Parsers (ICSNPP) - Inter-Control Center Communications Protocol (ICCP)
+
+## Overview
+
+This plugin provides a protocol analyzer for Inter-Control Center Communications Protocol (IEC 60870-6/TASE.2).
+> Note: For now, only a quick start is provided to test the implementation easily.
+
+## Quick start
 
 `explore-mms` is a command-line tool for inspecting devices that provide an MMS server (IEC 61850, EN 61850-8-1). The program connects to a specified MMS server and outputs information about the server identity, supported features, domains, and domain variables in JSON format.
 
-## Building and Compilation
+### Building and Compilation
 
 **Requirements:**
 
@@ -21,7 +30,7 @@ make
 
 The resulting binary `explore-mms` will be located in the build folder.
 
-## Dependencies
+### Dependencies
 
 To build and run, you need:
 
@@ -30,26 +39,27 @@ To build and run, you need:
 
 `explore-mms` is linked **statically** against `libiec61850` and other system libraries where possible. There are no runtime dependencies.
 
-## Installation & Deployment
+### Installation & Deployment
 
 Since the binary is **statically linked**, it can be used on almost any recent Linux system (x86-64) without requiring the `libiec61850` library to be installed on the system.
 
 Just copy the generated `explore-mms` binary anywhere and execute it directly.
 
 **Example:**
+
 ```sh
 ./explore-mms --help
 ```
 
-## Usage and Parameters
+#### Usage and Parameters
 
 The program can be started with the following parameters:
 
-```
+```sh
 explore-mms [--password PASSWORD] [hostname [port]]
 ```
 
-### Options:
+#### Options
 
 `--help`:
 : Displays the help screen.
@@ -57,7 +67,7 @@ explore-mms [--password PASSWORD] [hostname [port]]
 `--password PASSWORD`:
 : Uses ACSE password authentication during connection setup.
 
-### Arguments:
+#### Arguments
 
 `hostname`:
 : Hostname or IP address of the MMS server. (Default: `localhost`)
@@ -65,13 +75,13 @@ explore-mms [--password PASSWORD] [hostname [port]]
 `port`:
 : MMS server's TCP port. (Default: `102`)
 
-### Examples:
+#### Examples
 
 - Default call (no authentication, local): `explore-mms`
 - With password authentication and explicit IP: `explore-mms --password secret 192.168.1.1`
 - With all parameters: `explore-mms --password secret 192.168.1.1 102`
 
-## Notes
+### Notes
 
 - All program results (except error messages) are written as JSON to `stdout`.
 - Errors and exceptions are output in human-readable form to `stderr` and cause program termination.
