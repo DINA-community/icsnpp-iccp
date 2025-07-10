@@ -5,7 +5,7 @@ Industrial Control Systems Network Protocol Parsers (ICSNPP) - Inter-Control Cen
 ## Overview
 
 This plugin provides a protocol analyzer for Inter-Control Center Communications Protocol (IEC 60870-6/TASE.2).
-> Note: For now, only a quick start is provided to test the implementation easily.
+> Note: For now, only a quick start is provided to test the implementation easily. The intension is to get the TASE.2 structure before integrating the script into zeek.
 
 ## Quick start
 
