@@ -487,12 +487,42 @@ static void print_server_identity_json(MmsConnection con, const char* hostname, 
     }
 }
 
+static int hex2int(const char* s)
+{
+    int val = 0;
+    if (!s) return 0;
+    if (*s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X'))
+        s += 2;
+    while (*s) {
+        char c = *s++;
+        if (c >= '0' && c <= '9')
+            val = (val << 4) + (c - '0');
+        else if (c >= 'a' && c <= 'f')
+            val = (val << 4) + (c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F')
+            val = (val << 4) + (c - 'A' + 10);
+        else
+            break;
+    }
+    return val;
+}
+
 static void print_help(const char* prog_name) {
-    printf("Usage: %s [--password PASSWORD] [hostname [port]]\n", prog_name);
+    printf("Usage: %s [options] [hostname [port]]\n", prog_name);
     printf("Query an MMS server and print information as JSON.\n\n");
     printf("Options:\n");
-    printf("  --help        Print this help message and exit.\n");
-    printf("  --password    Set the password for ACSE password authentication.\n");
+    printf("  --help                         Print this help message and exit.\n");
+    printf("  --password PASSWORD            Set the password for ACSE password authentication.\n");
+    printf("  --remote-ap-title STR          Set remote AP-Title (e.g. '1.1.1.999.1').\n");
+    printf("  --remote-ae-qualifier N        Set remote AE-Qualifier (e.g. '12').\n");
+    printf("  --remote-p-selector HEX        Set remote Presentation-Selector (e.g. '0x00000001').\n");
+    printf("  --remote-s-selector HEX        Set remote Session-Selector (e.g. '0x0001').\n");
+    printf("  --remote-t-selector HEX        Set remote Transport-Selector (e.g. '0x0001').\n");
+    printf("  --local-ap-title STR           Set local AP-Title (e.g. '1.1.1.999').\n");
+    printf("  --local-ae-qualifier N         Set local AE-Qualifier (e.g. '12').\n");
+    printf("  --local-p-selector HEX         Set local Presentation-Selector (e.g. '0x00000001').\n");
+    printf("  --local-s-selector HEX         Set local Session-Selector (e.g. '0x0001').\n");
+    printf("  --local-t-selector HEX         Set local Transport-Selector (e.g. '0x0001').\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  hostname      IP address or hostname of the server (default: localhost)\n");
@@ -503,6 +533,26 @@ int main(int argc, char** argv) {
     char* hostname = NULL;
     int tcpPort = 102;
     char* password = NULL;
+
+    // ISO Connection Parameter fields
+    char* remote_ap_title = NULL;
+    int remote_ae_qualifier = -1;
+    int remote_p_selector = -1;
+    int remote_s_selector = -1;
+    int remote_t_selector = -1;
+
+    char* local_ap_title = NULL;
+    int local_ae_qualifier = -1;
+    int local_p_selector = -1;
+    int local_s_selector = -1;
+    int local_t_selector = -1;
+
+    // Defaults
+    const char* default_local_ap_title = "1.1.1.999";
+    const int default_local_ae_qualifier = 12;
+    const char* default_remote_ap_title = "1.1.1.999.1";
+    const int default_remote_ae_qualifier = 12;
+
     MmsError error;
     int returnCode = 0;
 
@@ -517,6 +567,86 @@ int main(int argc, char** argv) {
                 argidx += 2;
             } else {
                 fprintf(stderr, "Error: --password requires a value.\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--remote-ap-title") == 0) {
+            if ((argidx+1) < argc) {
+                remote_ap_title = argv[argidx + 1];
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--remote-ap-title: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--remote-ae-qualifier") == 0) {
+            if ((argidx+1) < argc) {
+                remote_ae_qualifier = atoi(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--remote-ae-qualifier: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--remote-p-selector") == 0) {
+            if ((argidx+1) < argc) {
+                remote_p_selector = hex2int(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--remote-p-selector: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--remote-s-selector") == 0) {
+            if ((argidx+1) < argc) {
+                remote_s_selector = hex2int(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--remote-s-selector: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--remote-t-selector") == 0) {
+            if ((argidx+1) < argc) {
+                remote_t_selector = hex2int(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--remote-t-selector: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--local-ap-title") == 0) {
+            if ((argidx+1) < argc) {
+                local_ap_title = argv[argidx + 1];
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--local-ap-title: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--local-ae-qualifier") == 0) {
+            if ((argidx+1) < argc) {
+                local_ae_qualifier = atoi(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--local-ae-qualifier: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--local-p-selector") == 0) {
+            if ((argidx+1) < argc) {
+                local_p_selector = hex2int(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--local-p-selector: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--local-s-selector") == 0) {
+            if ((argidx+1) < argc) {
+                local_s_selector = hex2int(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--local-s-selector: argument required\n");
+                return EXIT_FAILURE;
+            }
+        } else if (strcmp(argv[argidx], "--local-t-selector") == 0) {
+            if ((argidx+1) < argc) {
+                local_t_selector = hex2int(argv[argidx+1]);
+                argidx += 2;
+            } else {
+                fprintf(stderr, "--local-t-selector: argument required\n");
                 return EXIT_FAILURE;
             }
         } else if (argv[argidx][0] == '-') {
@@ -540,9 +670,71 @@ int main(int argc, char** argv) {
         hostname = "localhost";
 
     MmsConnection con = MmsConnection_create();
+    IsoConnectionParameters params = MmsConnection_getIsoConnectionParameters(con);
+
+    // SET ISO CONNECTION PARAMETERS ----------------------------------------
+    // Remote AP-Title + AE-Qualifier
+    if (!remote_ap_title) remote_ap_title = (char*)default_remote_ap_title;
+    if (remote_ae_qualifier < 0) remote_ae_qualifier = default_remote_ae_qualifier;
+    IsoConnectionParameters_setRemoteApTitle(params, remote_ap_title, remote_ae_qualifier);
+
+    // Local AP-Title + AE-Qualifier
+    if (!local_ap_title) local_ap_title = (char*)default_local_ap_title;
+    if (local_ae_qualifier < 0) local_ae_qualifier = default_local_ae_qualifier;
+    IsoConnectionParameters_setLocalApTitle(params, local_ap_title, local_ae_qualifier);
+
+    // Remote Selectors
+    if (remote_p_selector >= 0 || remote_s_selector >= 0 || remote_t_selector >= 0) {
+        PSelector psel = {4, {0,0,0,1}};
+        SSelector ssel = {2, {0,1}};
+        TSelector tsel = {2, {0,1}};
+        if (remote_p_selector >= 0) {
+            psel.size = 4;
+            psel.value[0] = (remote_p_selector >> 24) & 0xFF;
+            psel.value[1] = (remote_p_selector >> 16) & 0xFF;
+            psel.value[2] = (remote_p_selector >> 8) & 0xFF;
+            psel.value[3] = remote_p_selector & 0xFF;
+        }
+        if (remote_s_selector >= 0) {
+            ssel.size = 2;
+            ssel.value[0] = (remote_s_selector >> 8) & 0xFF;
+            ssel.value[1] = remote_s_selector & 0xFF;
+        }
+        if (remote_t_selector >= 0) {
+            tsel.size = 2;
+            tsel.value[0] = (remote_t_selector >> 8) & 0xFF;
+            tsel.value[1] = remote_t_selector & 0xFF;
+        }
+        IsoConnectionParameters_setRemoteAddresses(params, psel, ssel, tsel);
+    }
+
+    // Local Selectors
+    if (local_p_selector >= 0 || local_s_selector >= 0 || local_t_selector >= 0) {
+        PSelector psel = {4, {0,0,0,1}};
+        SSelector ssel = {2, {0,1}};
+        TSelector tsel = {2, {0,1}};
+        if (local_p_selector >= 0) {
+            psel.size = 4;
+            psel.value[0] = (local_p_selector >> 24) & 0xFF;
+            psel.value[1] = (local_p_selector >> 16) & 0xFF;
+            psel.value[2] = (local_p_selector >> 8) & 0xFF;
+            psel.value[3] = local_p_selector & 0xFF;
+        }
+        if (local_s_selector >= 0) {
+            ssel.size = 2;
+            ssel.value[0] = (local_s_selector >> 8) & 0xFF;
+            ssel.value[1] = local_s_selector & 0xFF;
+        }
+        if (local_t_selector >= 0) {
+            tsel.size = 2;
+            tsel.value[0] = (local_t_selector >> 8) & 0xFF;
+            tsel.value[1] = local_t_selector & 0xFF;
+        }
+        IsoConnectionParameters_setLocalAddresses(params, psel, ssel, tsel);
+    }
+    // ----------------------------------------
 
     if (password != NULL && strlen(password) > 0) {
-        IsoConnectionParameters params = MmsConnection_getIsoConnectionParameters(con);
         AcseAuthenticationParameter acseParam = AcseAuthenticationParameter_create();
         AcseAuthenticationParameter_setAuthMechanism(acseParam, ACSE_AUTH_PASSWORD);
         AcseAuthenticationParameter_setPassword(acseParam, password);
@@ -649,7 +841,6 @@ cleanup:
     if (con) {
         IsoConnectionParameters params = MmsConnection_getIsoConnectionParameters(con);
         if (params && password) {
-            // Destroy the authentication parameter if set (avoid leak)
             AcseAuthenticationParameter acseParam = NULL;
             acseParam = params->acseAuthParameter;
             if (acseParam) {
@@ -661,4 +852,3 @@ cleanup:
     }
     return returnCode;
 }
-
