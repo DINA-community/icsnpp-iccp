@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <libiec61850/iec61850_common.h>
-#include <libiec61850/mms_client_connection.h>
-#include <libiec61850/iso_connection_parameters.h>
+#include <iec61850_common.h>
+#include <mms_client_connection.h>
+#include <iso_connection_parameters.h>
 
 static void print_json_string(const char* str) {
     putchar('"');
