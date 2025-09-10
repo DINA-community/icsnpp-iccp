@@ -204,7 +204,7 @@ static void zeek_write_tail(FILE* zf)
         "  }\n\n"
         "event zeek_init()\n"
         "  {\n"
-        "  Log::create_stream(MMS_VARS_LOG, [$columns=VarsLog, $path=\"mms_vars\"]);\n"
+        "  Log::create_stream(MMS_VARS_LOG, [$columns=VarsLog, $path=\"tase2\"]);\n"
         "  }\n\n"
         "# ============== Event-Handler (basierend auf events.zeek) ==============\n"
         "# Read -> Response (Erfolg)\n"
