@@ -1,0 +1,22 @@
+# builds mms-explore in /root/build
+FROM debian:trixie
+
+RUN apt-get update && \
+    apt-get install -y cmake build-essential git
+
+ADD . /root/mms-explore/
+
+RUN cd /root/ && \
+    # tested with v1.6 \
+    git clone https://github.com/mz-automation/libiec61850 && \
+    cd libiec61850 && \
+    mkdir build && cd build && \
+    cmake .. && \
+    make && make install && \
+    echo "/usr/local/lib/" >> /etc/ld.so.conf.d/local.conf && \
+    ldconfig
+
+RUN mkdir /root/build && \
+    cd /root/build && \
+    cmake /root/mms-explore && \
+    make
