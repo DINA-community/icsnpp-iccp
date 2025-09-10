@@ -503,43 +503,7 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
     exit(EXIT_FAILURE);
 }
 
-static long decode_bitstring_as_int(MmsValue* value) {
-    if (!value || MmsValue_getType(value) != MMS_BIT_STRING) return -1;
-    int size = MmsValue_getBitStringByteSize(value);
-    uint8_t* buf = (uint8_t*)MmsValue_getOctetStringBuffer(value);
-    if (size == 0) return 0;
-    if (size == 1) return buf[0];
-    if (size == 2) return ((long)buf[0] << 8) | buf[1];
-    return buf[0];
-}
-
-static const char* tase2_flat_type(MmsValue* value) {
-    if (!value) return "unknown";
-    MmsType t = MmsValue_getType(value);
-    if (t == MMS_FLOAT) return "Real";
-    if (t == MMS_INTEGER) return "Discrete_Or_State";
-    if (t == MMS_UNSIGNED) return "Unsigned";
-    if (t == MMS_BOOLEAN) return "Bool";
-    if (t == MMS_STRING || t == MMS_VISIBLE_STRING) return "String";
-    if (t == MMS_BIT_STRING) return "Discrete_Or_State";
-    if (t == MMS_STRUCTURE) {
-        int n = MmsValue_getArraySize(value);
-        if (n > 0) {
-            MmsType t0 = MmsValue_getType(MmsValue_getElement(value, 0));
-            if (t0 == MMS_FLOAT) return "Real";
-            if (t0 == MMS_INTEGER) return "Discrete_Or_State";
-            if (t0 == MMS_UNSIGNED) return "Unsigned";
-            if (t0 == MMS_BIT_STRING && decode_bitstring_as_int(MmsValue_getElement(value, 0)) >= 0)
-                return "Discrete_Or_State";
-            if (n >= 2) {
-                MmsType t1 = MmsValue_getType(MmsValue_getElement(value, 1));
-                if (t0 == MMS_INTEGER && t1 == MMS_BIT_STRING)
-                    return "Discrete_Or_State";
-            }
-        }
-    }
-    return "unknown";
-}
+/* ==================== Type helpers (spec-based) ==================== */
 
 static const char* mms_type_to_string(MmsType t)
 {
@@ -563,21 +527,71 @@ static const char* mms_type_to_string(MmsType t)
     }
 }
 
-static const char* get_structure_main_type_string(MmsValue* value)
+static const char* flat_type_from_mms_type(MmsType t)
 {
-    if (!value) return "null";
-    MmsType t = MmsValue_getType(value);
+    switch (t) {
+        case MMS_FLOAT:           return "Real";
+        case MMS_INTEGER:         return "Discrete_Or_State";
+        case MMS_UNSIGNED:        return "Unsigned";
+        case MMS_BOOLEAN:         return "Bool";
+        case MMS_VISIBLE_STRING:
+        case MMS_STRING:          return "String";
+        case MMS_BIT_STRING:      return "Discrete_Or_State";
+        default:                  return "unknown";
+    }
+}
 
-    if (t == MMS_STRUCTURE) {
-        int n = MmsValue_getArraySize(value);
-        if (n > 0) {
-            MmsType t0 = MmsValue_getType(MmsValue_getElement(value, 0));
-            return mms_type_to_string(t0);
-        } else {
-            return "UNKNOWN";
+static const char* get_main_mms_type_from_spec(MmsVariableSpecification* spec)
+{
+    if (!spec) return "UNKNOWN";
+
+    if (spec->type == MMS_STRUCTURE) {
+        if (spec->typeSpec.structure.elementCount > 0 && spec->typeSpec.structure.elements) {
+            MmsVariableSpecification* e0 = spec->typeSpec.structure.elements[0];
+            if (e0) return mms_type_to_string(e0->type);
         }
-    } else {
-        return mms_type_to_string(t);
+        return "UNKNOWN";
+    }
+    else if (spec->type == MMS_ARRAY) {
+        if (spec->typeSpec.array.elementTypeSpec)
+            return mms_type_to_string(spec->typeSpec.array.elementTypeSpec->type);
+        return "UNKNOWN";
+    }
+    else {
+        return mms_type_to_string(spec->type);
+    }
+}
+
+static const char* tase2_flat_type_from_spec(MmsVariableSpecification* spec)
+{
+    if (!spec) return "unknown";
+
+    /* If it is a structure/array we infer from first element (similar to value-based logic before) */
+    if (spec->type == MMS_STRUCTURE) {
+        int n = spec->typeSpec.structure.elementCount;
+        if (n > 0 && spec->typeSpec.structure.elements) {
+            MmsVariableSpecification* e0 = spec->typeSpec.structure.elements[0];
+            if (e0) {
+                const char* ft0 = flat_type_from_mms_type(e0->type);
+                if (ft0 && strcmp(ft0, "unknown") != 0)
+                    return ft0;
+
+                if (n >= 2) {
+                    MmsVariableSpecification* e1 = spec->typeSpec.structure.elements[1];
+                    if (e0->type == MMS_INTEGER && e1 && e1->type == MMS_BIT_STRING)
+                        return "Discrete_Or_State";
+                }
+            }
+        }
+        return "unknown";
+    }
+    else if (spec->type == MMS_ARRAY) {
+        if (spec->typeSpec.array.elementTypeSpec)
+            return flat_type_from_mms_type(spec->typeSpec.array.elementTypeSpec->type);
+        return "unknown";
+    }
+    else {
+        return flat_type_from_mms_type(spec->type);
     }
 }
 
@@ -871,7 +885,7 @@ int main(int argc, char** argv) {
         print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to retrieve server identity");
     }
 
-    /* TASE2_Version */
+    /* TASE2_Version (allowed to read) */
     MmsValue* tase2v = MmsConnection_readVariable(con, &error, NULL, "TASE2_Version");
     if (error != MMS_ERROR_NONE || tase2v == NULL) {
         print_connection_error_and_exit(hostname, tcpPort, error, con, "Reading variable 'TASE2_Version' failed");
@@ -899,7 +913,7 @@ int main(int argc, char** argv) {
     /* Write Zeek header to stdout */
     zeek_write_header(zf, server_vendor, server_model, server_revision, tase2_version_str);
 
-    /* Enumerate domains and variables to populate Zeek table */
+    /* Enumerate domains and variables to populate Zeek table (using variable access attributes) */
     LinkedList domains = MmsConnection_getDomainNames(con, &error);
     if (error != MMS_ERROR_NONE || domains == NULL) {
         print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to retrieve domain-list");
@@ -920,16 +934,17 @@ int main(int argc, char** argv) {
 
             if (!is_ignored(varName)) {
                 MmsError localErr = MMS_ERROR_NONE;
-                MmsValue* value = MmsConnection_readVariable(con, &localErr, domainName, varName);
-                if (localErr != MMS_ERROR_NONE) {
-                    print_connection_error_and_exit(hostname, tcpPort, localErr, con, varName);
+                MmsVariableSpecification* spec =
+                    MmsConnection_getVariableAccessAttributes(con, &localErr, domainName, varName);
+                if (localErr != MMS_ERROR_NONE || spec == NULL) {
+                    print_connection_error_and_exit(hostname, tcpPort, localErr, con, "GetVariableAccessAttributes failed");
                 }
 
-                const char* ft = tase2_flat_type(value);
-                const char* mt = get_structure_main_type_string(value);
+                const char* ft = tase2_flat_type_from_spec(spec);
+                const char* mt = get_main_mms_type_from_spec(spec);
                 zeek_write_var_entry(zf, domainName, varName, ft, mt, &zeek_first_var_entry);
 
-                if (value) MmsValue_delete(value);
+                MmsVariableSpecification_destroy(spec);
             }
 
             varElem = LinkedList_getNext(varElem);
