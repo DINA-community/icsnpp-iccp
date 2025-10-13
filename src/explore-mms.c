@@ -6,6 +6,8 @@
 #include <mms_client_connection.h>
 #include <iso_connection_parameters.h>
 
+#define PROGRAM_VERSION "0.9.3"
+
 static void zeek_fputs_escaped(FILE* f, const char* s)
 {
     fputc('"', f);
@@ -492,6 +494,7 @@ static void print_help(const char* prog_name) {
     printf("Query an MMS server and print a Zeek script to stdout.\n\n");
     printf("Options:\n");
     printf("  --help                         Print this help message and exit.\n");
+    printf("  --version                      Print program version and exit.\n");
     printf("  --password PASSWORD            Set the password for ACSE password authentication.\n");
     printf("  --remote-ap-title STR          Set remote AP-Title (e.g. '1.1.1.999.1').\n");
     printf("  --remote-ae-qualifier N        Set remote AE-Qualifier (e.g. '12').\n");
@@ -547,6 +550,9 @@ int main(int argc, char** argv) {
     while (argidx < argc) {
         if (strcmp(argv[argidx], "--help") == 0) {
             print_help(argv[0]);
+            return EXIT_SUCCESS;
+        } else if (strcmp(argv[argidx], "--version") == 0) {
+            printf("%s version %s\n", argv[0], PROGRAM_VERSION);
             return EXIT_SUCCESS;
         } else if (strcmp(argv[argidx], "--password") == 0) {
             if ((argidx + 1) < argc) {
