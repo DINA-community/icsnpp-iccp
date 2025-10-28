@@ -6,7 +6,7 @@
 #include <mms_client_connection.h>
 #include <iso_connection_parameters.h>
 
-/* ==================== Utility: Zeek printing helpers ==================== */
+#define PROGRAM_VERSION "0.9.3"
 
 static void zeek_fputs_escaped(FILE* f, const char* s)
 {
@@ -39,25 +39,21 @@ static void zeek_write_header(FILE* zf,
         "# Do not edit manually.\n\n"
         "module tase2;\n\n"
         "export {\n"
-        "  # Log-ID registrieren\n"
         "  redef enum Log::ID += { MMS_VARS_LOG };\n\n"
-        "  # Log-Datensatz für MMS-Variablenwerte\n"
         "  type VarsLog: record {\n"
         "    ts: time &log;\n"
         "    id: conn_id &log;\n"
         "    uid: string &log &optional;\n"
-        "    op: string &log;        # genutzte MMS-Operation (read, write, report)\n"
-        "    direction: string &log; # rsp=Read-Response, rpt=InformationReport, wrt=Write-Response\n"
-        "    domain: string &log;\n"
-        "    name: string &log;      # Item/Variable innerhalb der Domäne\n"
-        "    obj: string &log;       # domain.name\n"
-        "    flat_type: string &log; # TASE2-Flat-Type (Real, Unsigned, Bool, Discrete_Or_State, String, unknown)\n"
-        "    mms_type: string &log;  # Haupt-MMS-Typ (MMS_FLOAT, MMS_INTEGER, ...)\n"
+        "    op: string &log;        # read, write or report\n"
+        "    domain: string &log &optional;\n"
+        "    name: string &log;\n"
+        "    vmd_specific: bool &log;\n"
+        "    mms_type: string &log;\n"
         "    value: string &log &optional;\n"
         "    error: string &log &optional;\n"
         "  };\n"
         "}\n\n"
-        "# Server-Metadaten (aus explore-mms)\n"
+        "# server identity\n"
         "const server_vendor = ");
     zeek_fputs_escaped(zf, vendor ? vendor : "");
     fprintf(zf, ";\nconst server_model = ");
@@ -69,111 +65,54 @@ static void zeek_write_header(FILE* zf,
     fprintf(zf, ";\n\n");
 
     fprintf(zf,
-        "# Beispielhafte, generierte Variablen-Metadaten\n"
-        "# Schlüssel = \"DOMAIN.ITEM\"\n"
+        "type VarScope: record {\n"
+        "  domain: string &optional; # unset if VMD scope\n"
+        "  name: string;\n"
+        "};\n\n"
         "type VarMeta: record {\n"
-        "  domain: string;\n"
-        "  item: string;\n"
-        "  flat_type: string;\n"
         "  mms_type: string;\n"
+        "  is_primitive: bool;\n"
+        "  value_field: count &optional;\n"
         "};\n\n");
 
-    fprintf(zf, "const mms_variables: table[string] of VarMeta = {\n");
+    fprintf(zf, "const mms_variables: table[VarScope] of VarMeta = {\n");
 }
 
 static void zeek_write_var_entry(FILE* zf,
                                  const char* domain,
                                  const char* item,
-                                 const char* flat_type,
                                  const char* mms_type,
+                                 int is_primitive,
+                                 int value_field_index,
                                  int* first_entry)
 {
     if (!(*first_entry))
         fprintf(zf, ",\n");
     *first_entry = 0;
 
-    /* key: ["DOMAIN.ITEM"] = [$domain="DOMAIN", $item="ITEM", $flat_type="...", $mms_type="..."] */
-    fprintf(zf, "  [");
-    /* key string */
-    {
-        char keybuf[2048];
-        keybuf[0] = '\0';
-        if (domain && item) {
-            size_t dn = strlen(domain), in = strlen(item);
-            if (dn + in + 2 < sizeof(keybuf)) {
-                strcpy(keybuf, domain);
-                strcat(keybuf, ".");
-                strcat(keybuf, item);
-            } else {
-                strncpy(keybuf, "<name-too-long>", sizeof(keybuf)-1);
-                keybuf[sizeof(keybuf)-1] = '\0';
-            }
-        } else {
-            strncpy(keybuf, "<unknown>", sizeof(keybuf)-1);
-            keybuf[sizeof(keybuf)-1] = '\0';
-        }
-        zeek_fputs_escaped(zf, keybuf);
+    fprintf(zf, "  [[");
+    if (domain && strcmp(domain, "VMD") != 0) {
+        fprintf(zf, "$domain=");
+        zeek_fputs_escaped(zf, domain);
+        fprintf(zf, ", ");
     }
-    fprintf(zf, "] = [$domain=");
-    zeek_fputs_escaped(zf, domain ? domain : "");
-    fprintf(zf, ", $item=");
+    fprintf(zf, "$name=");
     zeek_fputs_escaped(zf, item ? item : "");
-    fprintf(zf, ", $flat_type=");
-    zeek_fputs_escaped(zf, flat_type ? flat_type : "unknown");
-    fprintf(zf, ", $mms_type=");
+    fprintf(zf, "]] = [");
+    fprintf(zf, "$mms_type=");
     zeek_fputs_escaped(zf, mms_type ? mms_type : "UNKNOWN");
-    fprintf(zf, "]");
-}
-
-static void zeek_write_known_vars_head(FILE* zf)
-{
-    fprintf(zf, "\n};\n\nconst known_vars: set[string] = set(\n");
-}
-
-static void zeek_write_known_var(FILE* zf, const char* domain, const char* item, int* first)
-{
-    if (!(*first))
-        fprintf(zf, ",\n");
-    *first = 0;
-
-    char keybuf[2048];
-    keybuf[0] = '\0';
-    if (domain && item) {
-        size_t dn = strlen(domain), in = strlen(item);
-        if (dn + in + 2 < sizeof(keybuf)) {
-            strcpy(keybuf, domain);
-            strcat(keybuf, ".");
-            strcat(keybuf, item);
-        } else {
-            strncpy(keybuf, "<name-too-long>", sizeof(keybuf)-1);
-            keybuf[sizeof(keybuf)-1] = '\0';
-        }
-    } else {
-        strncpy(keybuf, "<unknown>", sizeof(keybuf)-1);
-        keybuf[sizeof(keybuf)-1] = '\0';
+    fprintf(zf, ", $is_primitive=%s", is_primitive ? "T" : "F");
+    if (value_field_index >= 0) {
+        fprintf(zf, ", $value_field=%d", value_field_index);
     }
-    fprintf(zf, "  ");
-    zeek_fputs_escaped(zf, keybuf);
+    fprintf(zf, "]");
 }
 
 static void zeek_write_tail(FILE* zf)
 {
-    fprintf(zf, "\n);\n\n");
+    fprintf(zf, "\n};\n\n");
 
-    /* helper functions and event handlers */
     fprintf(zf, "%s",
-        "# Hilfsfunktion: ObjectName -> \"DOMAIN.ITEM\" oder Alternativen\n"
-        "function obj_name_to_key(n: mms::ObjectName): string\n"
-        "  {\n"
-        "  if ( n?$domain_specific )\n"
-        "    return fmt(\"%s.%s\", n$domain_specific$domainId, n$domain_specific$itemId);\n"
-        "  if ( n?$vmd_specific )\n"
-        "    return fmt(\"VMD.%s\", n$vmd_specific);\n"
-        "  if ( n?$aa_specific )\n"
-        "    return fmt(\"AA.%s\", n$aa_specific);\n"
-        "  return \"<unknown>\";\n"
-        "  }\n\n"
-        "# Hilfsfunktion: Data -> string (vereinfachtes, generisches Flattening)\n"
         "function data_to_str(d: mms::Data): string\n"
         "  {\n"
         "  if ( d?$integer )        return fmt(\"%d\", d$integer);\n"
@@ -182,167 +121,120 @@ static void zeek_write_tail(FILE* zf)
         "  if ( d?$floating_point ) return d$floating_point;\n"
         "  if ( d?$visible_string ) return d$visible_string;\n"
         "  if ( d?$mMSString )      return d$mMSString;\n"
-        "  if ( d?$bit_string )     return d$bit_string;\n"
         "  if ( d?$octet_string )   return d$octet_string;\n"
         "  if ( d?$utc_time )       return d$utc_time;\n"
         "  if ( d?$binary_time )    return d$binary_time;\n"
+        "  if ( d?$bit_string )\n"
+        "    { local result = \"\"; for ( s in d$bit_string ) result += fmt(\"%02x\", bytestring_to_count(s)); return result; }\n"
         "  if ( d?$structure )\n"
-        "    {\n"
-        "    local parts: vector of string = vector();\n"
-        "    for ( i in d$structure )\n"
-        "      parts += data_to_str(d$structure[i]);\n"
-        "    return fmt(\"[%s]\", join_string_vec(parts, \",\"));\n"
-        "    }\n"
+        "    { local parts: vector of string = vector(); for ( i in d$structure ) parts += data_to_str(d$structure[i]); return fmt(\"[%s]\", join_string_vec(parts, \",\")); }\n"
         "  if ( d?$array )\n"
-        "    {\n"
-        "    local parts2: vector of string = vector();\n"
-        "    for ( i in d$array )\n"
-        "      parts2 += data_to_str(d$array[i]);\n"
-        "    return fmt(\"[%s]\", join_string_vec(parts2, \",\"));\n"
-        "    }\n"
+        "    { local parts2: vector of string = vector(); for ( i in d$array ) parts2 += data_to_str(d$array[i]); return fmt(\"[%s]\", join_string_vec(parts2, \",\")); }\n"
         "  return \"<unset>\";\n"
+        "  }\n\n"
+        "function extract_var_value(data: mms::Data, meta: VarMeta): string\n"
+        "  {\n"
+        "  return meta$is_primitive ? data_to_str(data)\n"
+        "         : (meta?$value_field && |data$structure| > meta$value_field ? data_to_str(data$structure[meta$value_field]) : \"<unset>\");\n"
         "  }\n\n"
         "event zeek_init()\n"
         "  {\n"
         "  Log::create_stream(MMS_VARS_LOG, [$columns=VarsLog, $path=\"tase2\"]);\n"
         "  }\n\n"
-        "# ============== Event-Handler (basierend auf events.zeek) ==============\n"
-        "# Read -> Response (Erfolg)\n"
-        "event mms::VariableReadResponse(c: connection, name: mms::ObjectName, data: mms::Data)\n"
+        "\n"
+        "function log_var_event(c: connection, op: string, domain: string, name: string, data: mms::Data)\n"
         "  {\n"
-        "  local k = obj_name_to_key(name);\n"
-        "  if ( k in known_vars )\n"
+        "  local s: VarScope;\n"
+        "  if ( domain == \"\")\n"
+        "    s = [$name=name];\n"
+        "  else\n"
+        "    s = [$domain=domain, $name=name];\n"
+        "  if ( s in mms_variables )\n"
         "    {\n"
-        "    local meta = mms_variables[k];\n"
+        "    local meta = mms_variables[s];\n"
         "    Log::write(MMS_VARS_LOG,\n"
         "      [$ts=network_time(),\n"
         "       $id=c$id,\n"
         "       $uid=c?$uid ? c$uid : \"\",\n"
-        "       $op=\"read\",\n"
-        "       $direction=\"rsp\",\n"
-        "       $domain=meta$domain,\n"
-        "       $name=meta$item,\n"
-        "       $obj=k,\n"
-        "       $flat_type=meta$flat_type,\n"
+        "       $op=op,\n"
+        "       $domain=domain,\n"
+        "       $name=name,\n"
+        "       $vmd_specific=domain==\"\",\n"
         "       $mms_type=meta$mms_type,\n"
-        "       $value=data_to_str(data)\n"
+        "       $value=extract_var_value(data, meta)\n"
         "      ]);\n"
         "    }\n"
+        "  }\n"
+        "\n"
+        "function log_var_error_event(c: connection, op: string, domain: string, name: string, error: any)\n"
+        "  {\n"
+        "  local s: VarScope;\n"
+        "  if ( domain == \"\")\n"
+        "    s = [$name=name];\n"
+        "  else\n"
+        "    s = [$domain=domain, $name=name];\n"
+        "  if ( s in mms_variables )\n"
+        "    {\n"
+        "    local meta = mms_variables[s];\n"
+        "    Log::write(MMS_VARS_LOG,\n"
+        "      [$ts=network_time(),\n"
+        "       $id=c$id,\n"
+        "       $uid=c?$uid ? c$uid : \"\",\n"
+        "       $op=op,\n"
+        "       $domain=domain,\n"
+        "       $name=name,\n"
+        "       $vmd_specific=domain==\"\",\n"
+        "       $mms_type=meta$mms_type,\n"
+        "       $error=error\n"
+        "      ]);\n"
+        "    }\n"
+        "  }\n"
+        "\n"
+        "event mms::VariableReadResponse(c: connection, obj_name: mms::ObjectName, data: mms::Data)\n"
+        "  {\n"
+        "  if ( obj_name?$domain_specific )\n"
+        "      log_var_event(c, \"read\", obj_name$domain_specific$domainId, obj_name$domain_specific$itemId, data);\n"
+        "  else if ( obj_name?$vmd_specific )\n"
+        "      log_var_event(c, \"read\", \"\", obj_name$vmd_specific, data);\n"
         "  }\n\n"
-        "# Read -> Response (Fehler)\n"
-        "event mms::VariableReadResponseError(c: connection, name: mms::ObjectName, error: mms::DataAccessError)\n"
+        "event mms::VariableReadResponseError(c: connection, obj_name: mms::ObjectName, error: mms::DataAccessError)\n"
         "  {\n"
-        "  local k = obj_name_to_key(name);\n"
-        "  if ( k in known_vars )\n"
-        "    {\n"
-        "    local meta = mms_variables[k];\n"
-        "    Log::write(MMS_VARS_LOG,\n"
-        "      [$ts=network_time(),\n"
-        "       $id=c$id,\n"
-        "       $uid=c?$uid ? c$uid : \"\",\n"
-        "       $op=\"read\",\n"
-        "       $direction=\"rsp\",\n"
-        "       $domain=meta$domain,\n"
-        "       $name=meta$item,\n"
-        "       $obj=k,\n"
-        "       $flat_type=meta$flat_type,\n"
-        "       $mms_type=meta$mms_type,\n"
-        "       $error=fmt(\"%s\", error)\n"
-        "      ]);\n"
-        "    }\n"
+        "  if ( obj_name?$domain_specific )\n"
+        "      log_var_error_event(c, \"read\", obj_name$domain_specific$domainId, obj_name$domain_specific$itemId, fmt(\"%s\", error));\n"
+        "  else if ( obj_name?$vmd_specific )\n"
+        "      log_var_error_event(c, \"read\", \"\", obj_name$vmd_specific, fmt(\"%s\", error));\n"
         "  }\n\n"
-        "# Write -> Response (Erfolg)\n"
-        "event mms::VariableWriteResponse(c: connection, name: mms::ObjectName, data: mms::Data)\n"
+        "event mms::VariableWriteResponse(c: connection, obj_name: mms::ObjectName, data: mms::Data)\n"
         "  {\n"
-        "  local k = obj_name_to_key(name);\n"
-        "  if ( k in known_vars )\n"
-        "    {\n"
-        "    local meta = mms_variables[k];\n"
-        "    Log::write(MMS_VARS_LOG,\n"
-        "      [$ts=network_time(),\n"
-        "       $id=c$id,\n"
-        "       $uid=c?$uid ? c$uid : \"\",\n"
-        "       $op=\"write\",\n"
-        "       $direction=\"wrt\",\n"
-        "       $domain=meta$domain,\n"
-        "       $name=meta$item,\n"
-        "       $obj=k,\n"
-        "       $flat_type=meta$flat_type,\n"
-        "       $mms_type=meta$mms_type,\n"
-        "       $value=data_to_str(data)\n"
-        "      ]);\n"
-        "    }\n"
+        "  if ( obj_name?$domain_specific )\n"
+        "      log_var_event(c, \"write\", obj_name$domain_specific$domainId, obj_name$domain_specific$itemId, data);\n"
+        "  else if ( obj_name?$vmd_specific )\n"
+        "      log_var_event(c, \"write\", \"\", obj_name$vmd_specific, data);\n"
         "  }\n\n"
-        "# Write -> Response (Fehler)\n"
-        "event mms::VariableWriteResponseError(c: connection, name: mms::ObjectName, data: mms::Data, error: mms::DataAccessError)\n"
+        "event mms::VariableWriteResponseError(c: connection, obj_name: mms::ObjectName, data: mms::Data, error: mms::DataAccessError)\n"
         "  {\n"
-        "  local k = obj_name_to_key(name);\n"
-        "  if ( k in known_vars )\n"
-        "    {\n"
-        "    local meta = mms_variables[k];\n"
-        "    Log::write(MMS_VARS_LOG,\n"
-        "      [$ts=network_time(),\n"
-        "       $id=c$id,\n"
-        "       $uid=c?$uid ? c$uid : \"\",\n"
-        "       $op=\"write\",\n"
-        "       $direction=\"wrt\",\n"
-        "       $domain=meta$domain,\n"
-        "       $name=meta$item,\n"
-        "       $obj=k,\n"
-        "       $flat_type=meta$flat_type,\n"
-        "       $mms_type=meta$mms_type,\n"
-        "       $value=data_to_str(data),\n"
-        "       $error=fmt(\"%s\", error)\n"
-        "      ]);\n"
-        "    }\n"
+        "  if ( obj_name?$domain_specific )\n"
+        "      log_var_error_event(c, \"write\", obj_name$domain_specific$domainId, obj_name$domain_specific$itemId, fmt(\"%s\", error));\n"
+        "  else if ( obj_name?$vmd_specific )\n"
+        "      log_var_error_event(c, \"write\", \"\", obj_name$vmd_specific, fmt(\"%s\", error));\n"
         "  }\n\n"
-        "# Unconfirmed -> InformationReport (Erfolg)\n"
-        "event mms::VariableReport(c: connection, name: mms::ObjectName, data: mms::Data)\n"
+        "event mms::VariableReport(c: connection, obj_name: mms::ObjectName, data: mms::Data)\n"
         "  {\n"
-        "  local k = obj_name_to_key(name);\n"
-        "  if ( k in known_vars )\n"
-        "    {\n"
-        "    local meta = mms_variables[k];\n"
-        "    Log::write(MMS_VARS_LOG,\n"
-        "      [$ts=network_time(),\n"
-        "       $id=c$id,\n"
-        "       $uid=c?$uid ? c$uid : \"\",\n"
-        "       $op=\"report\",\n"
-        "       $direction=\"rpt\",\n"
-        "       $domain=meta$domain,\n"
-        "       $name=meta$item,\n"
-        "       $obj=k,\n"
-        "       $flat_type=meta$flat_type,\n"
-        "       $mms_type=meta$mms_type,\n"
-        "       $value=data_to_str(data)\n"
-        "      ]);\n"
-        "    }\n"
+        "  if ( obj_name?$domain_specific )\n"
+        "      log_var_event(c, \"report\", obj_name$domain_specific$domainId, obj_name$domain_specific$itemId, data);\n"
+        "  else if ( obj_name?$vmd_specific )\n"
+        "      log_var_event(c, \"report\", \"\", obj_name$vmd_specific, data);\n"
         "  }\n\n"
-        "# Unconfirmed -> InformationReport (Fehler)\n"
-        "event mms::VariableReportError(c: connection, name: mms::ObjectName, error: mms::DataAccessError)\n"
+        "event mms::VariableReportError(c: connection, obj_name: mms::ObjectName, error: mms::DataAccessError)\n"
         "  {\n"
-        "  local k = obj_name_to_key(name);\n"
-        "  if ( k in known_vars )\n"
-        "    {\n"
-        "    local meta = mms_variables[k];\n"
-        "    Log::write(MMS_VARS_LOG,\n"
-        "      [$ts=network_time(),\n"
-        "       $id=c$id,\n"
-        "       $uid=c?$uid ? c$uid : \"\",\n"
-        "       $op=\"report\",\n"
-        "       $direction=\"rpt\",\n"
-        "       $domain=meta$domain,\n"
-        "       $name=meta$item,\n"
-        "       $obj=k,\n"
-        "       $flat_type=meta$flat_type,\n"
-        "       $mms_type=meta$mms_type,\n"
-        "       $error=fmt(\"%s\", error)\n"
-        "      ]);\n"
-        "    }\n"
-        "  }\n");
+        "  if ( obj_name?$domain_specific )\n"
+        "      log_var_error_event(c, \"report\", obj_name$domain_specific$domainId, obj_name$domain_specific$itemId, fmt(\"%s\", error));\n"
+        "  else if ( obj_name?$vmd_specific )\n"
+        "      log_var_error_event(c, \"report\", \"\", obj_name$vmd_specific, fmt(\"%s\", error));\n"
+        "  }\n"
+    );
 }
 
-/* ==================== Error handling ==================== */
 static void print_connection_error_and_exit(const char* hostname, int port, MmsError error, MmsConnection connection, const char* what) {
     if (what && *what)
         fprintf(stderr, "Error: %s at MMS server %s:%d.\n", what, hostname, port);
@@ -503,7 +395,19 @@ static void print_connection_error_and_exit(const char* hostname, int port, MmsE
     exit(EXIT_FAILURE);
 }
 
-/* ==================== Type helpers (spec-based) ==================== */
+static const char* ignore_vars[] = {
+    "TASE2_Version", "Bilateral_Table_ID", "DSTrans", "DSTrans1", "DSTrans2",
+    "Next_DSTransfer_Set", "Next_TSTransfer_Set", "Transfer_Set_Name",
+     NULL
+};
+
+static int is_ignored(const char* name) {
+    for (int i = 0; ignore_vars[i] != NULL; ++i) {
+        if (strcasecmp(name, ignore_vars[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
 
 static const char* mms_type_to_string(MmsType t)
 {
@@ -527,81 +431,41 @@ static const char* mms_type_to_string(MmsType t)
     }
 }
 
-static const char* flat_type_from_mms_type(MmsType t)
+static int detect_var_type_custom(
+    MmsVariableSpecification* spec,
+    char* result_mms_type, size_t result_mms_type_sz,
+    int* is_primitive,
+    int* value_field_index,
+    const char* domain, const char* var)
 {
-    switch (t) {
-        case MMS_FLOAT:           return "Real";
-        case MMS_INTEGER:         return "Discrete_Or_State";
-        case MMS_UNSIGNED:        return "Unsigned";
-        case MMS_BOOLEAN:         return "Bool";
-        case MMS_VISIBLE_STRING:
-        case MMS_STRING:          return "String";
-        case MMS_BIT_STRING:      return "Discrete_Or_State";
-        default:                  return "unknown";
+    if (!spec) return 0;
+    if (spec->type != MMS_STRUCTURE) {
+        snprintf(result_mms_type, result_mms_type_sz, "%s", mms_type_to_string(spec->type));
+        *is_primitive = 1;
+        *value_field_index = -1;
+        return 1;
     }
-}
-
-static const char* get_main_mms_type_from_spec(MmsVariableSpecification* spec)
-{
-    if (!spec) return "UNKNOWN";
-
-    if (spec->type == MMS_STRUCTURE) {
-        if (spec->typeSpec.structure.elementCount > 0 && spec->typeSpec.structure.elements) {
-            MmsVariableSpecification* e0 = spec->typeSpec.structure.elements[0];
-            if (e0) return mms_type_to_string(e0->type);
-        }
-        return "UNKNOWN";
-    }
-    else if (spec->type == MMS_ARRAY) {
-        if (spec->typeSpec.array.elementTypeSpec)
-            return mms_type_to_string(spec->typeSpec.array.elementTypeSpec->type);
-        return "UNKNOWN";
-    }
-    else {
-        return mms_type_to_string(spec->type);
-    }
-}
-
-static const char* tase2_flat_type_from_spec(MmsVariableSpecification* spec)
-{
-    if (!spec) return "unknown";
-
-    /* If it is a structure/array we infer from first element (similar to value-based logic before) */
-    if (spec->type == MMS_STRUCTURE) {
-        int n = spec->typeSpec.structure.elementCount;
-        if (n > 0 && spec->typeSpec.structure.elements) {
-            MmsVariableSpecification* e0 = spec->typeSpec.structure.elements[0];
-            if (e0) {
-                const char* ft0 = flat_type_from_mms_type(e0->type);
-                if (ft0 && strcmp(ft0, "unknown") != 0)
-                    return ft0;
-
-                if (n >= 2) {
-                    MmsVariableSpecification* e1 = spec->typeSpec.structure.elements[1];
-                    if (e0->type == MMS_INTEGER && e1 && e1->type == MMS_BIT_STRING)
-                        return "Discrete_Or_State";
-                }
-            }
-        }
-        return "unknown";
-    }
-    else if (spec->type == MMS_ARRAY) {
-        if (spec->typeSpec.array.elementTypeSpec)
-            return flat_type_from_mms_type(spec->typeSpec.array.elementTypeSpec->type);
-        return "unknown";
-    }
-    else {
-        return flat_type_from_mms_type(spec->type);
-    }
-}
-
-static const char* ignore_vars[] = { "Bilateral_Table_ID", NULL };
-
-static int is_ignored(const char* name) {
-    for (int i = 0; ignore_vars[i] != NULL; ++i) {
-        if (strcasecmp(name, ignore_vars[i]) == 0)
+    for (int i = 0; i < spec->typeSpec.structure.elementCount; ++i) {
+        MmsVariableSpecification* elem = spec->typeSpec.structure.elements[i];
+        if (!elem || !elem->name) continue;
+        if (strcmp(elem->name, "Value") == 0) {
+            snprintf(result_mms_type, result_mms_type_sz, "%s", mms_type_to_string(elem->type));
+            *is_primitive = 0;
+            *value_field_index = i;
             return 1;
+        }
     }
+    for (int i = 0; i < spec->typeSpec.structure.elementCount; ++i) {
+        MmsVariableSpecification* elem = spec->typeSpec.structure.elements[i];
+        if (!elem || !elem->name) continue;
+        if (strcmp(elem->name, "Flags") == 0) {
+            snprintf(result_mms_type, result_mms_type_sz, "%s", mms_type_to_string(elem->type));
+            *is_primitive = 0;
+            *value_field_index = i;
+            return 1;
+        }
+    }
+    fprintf(stderr, "Warning: Variable '%s.%s' is a structure but has neither a member named 'Value' nor 'Flags' -> ignored\n", domain ? domain : "(null)", var ? var : "(null)");
     return 0;
 }
 
@@ -630,6 +494,7 @@ static void print_help(const char* prog_name) {
     printf("Query an MMS server and print a Zeek script to stdout.\n\n");
     printf("Options:\n");
     printf("  --help                         Print this help message and exit.\n");
+    printf("  --version                      Print program version and exit.\n");
     printf("  --password PASSWORD            Set the password for ACSE password authentication.\n");
     printf("  --remote-ap-title STR          Set remote AP-Title (e.g. '1.1.1.999.1').\n");
     printf("  --remote-ae-qualifier N        Set remote AE-Qualifier (e.g. '12').\n");
@@ -652,7 +517,6 @@ int main(int argc, char** argv) {
     int tcpPort = 102;
     char* password = NULL;
 
-    /* ISO Connection Parameter fields */
     char* remote_ap_title = NULL;
     int remote_ae_qualifier = -1;
     int remote_p_selector = -1;
@@ -665,18 +529,14 @@ int main(int argc, char** argv) {
     int local_s_selector = -1;
     int local_t_selector = -1;
 
-    /* Zeek output goes to stdout */
     FILE* zf = stdout;
     int zeek_first_var_entry = 1;
-    int zeek_first_known_var = 1;
 
-    /* Defaults */
     const char* default_local_ap_title = "1.1.1.999";
     const int default_local_ae_qualifier = 12;
     const char* default_remote_ap_title = "1.1.1.999.1";
     const int default_remote_ae_qualifier = 12;
 
-    /* Will capture identity and TASE2 version for Zeek header */
     const char* server_vendor = "";
     const char* server_model = "";
     const char* server_revision = "";
@@ -690,6 +550,9 @@ int main(int argc, char** argv) {
     while (argidx < argc) {
         if (strcmp(argv[argidx], "--help") == 0) {
             print_help(argv[0]);
+            return EXIT_SUCCESS;
+        } else if (strcmp(argv[argidx], "--version") == 0) {
+            printf("%s version %s\n", argv[0], PROGRAM_VERSION);
             return EXIT_SUCCESS;
         } else if (strcmp(argv[argidx], "--password") == 0) {
             if ((argidx + 1) < argc) {
@@ -802,18 +665,14 @@ int main(int argc, char** argv) {
     MmsConnection con = MmsConnection_create();
     IsoConnectionParameters params = MmsConnection_getIsoConnectionParameters(con);
 
-    /* SET ISO CONNECTION PARAMETERS ---------------------------------------- */
-    /* Remote AP-Title + AE-Qualifier */
     if (!remote_ap_title) remote_ap_title = (char*)default_remote_ap_title;
     if (remote_ae_qualifier < 0) remote_ae_qualifier = default_remote_ae_qualifier;
     IsoConnectionParameters_setRemoteApTitle(params, remote_ap_title, remote_ae_qualifier);
 
-    /* Local AP-Title + AE-Qualifier */
     if (!local_ap_title) local_ap_title = (char*)default_local_ap_title;
     if (local_ae_qualifier < 0) local_ae_qualifier = default_local_ae_qualifier;
     IsoConnectionParameters_setLocalApTitle(params, local_ap_title, local_ae_qualifier);
 
-    /* Remote Selectors */
     if (remote_p_selector >= 0 || remote_s_selector >= 0 || remote_t_selector >= 0) {
         PSelector psel = {4, {0,0,0,1}};
         SSelector ssel = {2, {0,1}};
@@ -838,7 +697,6 @@ int main(int argc, char** argv) {
         IsoConnectionParameters_setRemoteAddresses(params, psel, ssel, tsel);
     }
 
-    /* Local Selectors */
     if (local_p_selector >= 0 || local_s_selector >= 0 || local_t_selector >= 0) {
         PSelector psel = {4, {0,0,0,1}};
         SSelector ssel = {2, {0,1}};
@@ -862,7 +720,6 @@ int main(int argc, char** argv) {
         }
         IsoConnectionParameters_setLocalAddresses(params, psel, ssel, tsel);
     }
-    /* ---------------------------------------- */
 
     if (password != NULL && strlen(password) > 0) {
         AcseAuthenticationParameter acseParam = AcseAuthenticationParameter_create();
@@ -875,7 +732,6 @@ int main(int argc, char** argv) {
         print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to establish MMS connection");
     }
 
-    /* Server identity: retrieve and capture for Zeek */
     MmsServerIdentity* id = MmsConnection_identify(con, &error);
     if (id != NULL && error == MMS_ERROR_NONE) {
         server_vendor = id->vendorName ? id->vendorName : "";
@@ -885,13 +741,10 @@ int main(int argc, char** argv) {
         print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to retrieve server identity");
     }
 
-    /* TASE2_Version (allowed to read) */
     MmsValue* tase2v = MmsConnection_readVariable(con, &error, NULL, "TASE2_Version");
     if (error != MMS_ERROR_NONE || tase2v == NULL) {
         print_connection_error_and_exit(hostname, tcpPort, error, con, "Reading variable 'TASE2_Version' failed");
     }
-
-    /* Compute string for Zeek const */
     if (MmsValue_getType(tase2v) == MMS_STRUCTURE && MmsValue_getArraySize(tase2v) == 2) {
         MmsValue* major = MmsValue_getElement(tase2v, 0);
         MmsValue* minor = MmsValue_getElement(tase2v, 1);
@@ -910,28 +763,22 @@ int main(int argc, char** argv) {
     }
     MmsValue_delete(tase2v);
 
-    /* Write Zeek header to stdout */
     zeek_write_header(zf, server_vendor, server_model, server_revision, tase2_version_str);
 
-    /* Enumerate domains and variables to populate Zeek table (using variable access attributes) */
     LinkedList domains = MmsConnection_getDomainNames(con, &error);
     if (error != MMS_ERROR_NONE || domains == NULL) {
         print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to retrieve domain-list");
     }
-
     LinkedList domainElem = LinkedList_getNext(domains);
     while (domainElem != NULL) {
         char* domainName = (char*)domainElem->data;
-
         LinkedList variables = MmsConnection_getDomainVariableNames(con, &error, domainName);
         if (error != MMS_ERROR_NONE || variables == NULL) {
             print_connection_error_and_exit(hostname, tcpPort, error, con, "Failed to retrieve variable-list");
         }
-
         LinkedList varElem = LinkedList_getNext(variables);
         while (varElem != NULL) {
             char* varName = (char*)varElem->data;
-
             if (!is_ignored(varName)) {
                 MmsError localErr = MMS_ERROR_NONE;
                 MmsVariableSpecification* spec =
@@ -939,57 +786,46 @@ int main(int argc, char** argv) {
                 if (localErr != MMS_ERROR_NONE || spec == NULL) {
                     print_connection_error_and_exit(hostname, tcpPort, localErr, con, "GetVariableAccessAttributes failed");
                 }
-
-                const char* ft = tase2_flat_type_from_spec(spec);
-                const char* mt = get_main_mms_type_from_spec(spec);
-                zeek_write_var_entry(zf, domainName, varName, ft, mt, &zeek_first_var_entry);
-
+                char mms_type[64];
+                int is_primitive = 0;
+                int value_field_index = -1;
+                if (detect_var_type_custom(spec, mms_type, sizeof(mms_type), &is_primitive, &value_field_index, domainName, varName)) {
+                    zeek_write_var_entry(zf, domainName, varName, mms_type, is_primitive, value_field_index, &zeek_first_var_entry);
+                }
                 MmsVariableSpecification_destroy(spec);
             }
-
             varElem = LinkedList_getNext(varElem);
         }
         LinkedList_destroy(variables);
-
         domainElem = LinkedList_getNext(domainElem);
     }
     LinkedList_destroy(domains);
 
-    /* known_vars head */
-    zeek_write_known_vars_head(zf);
-
-    /* Re-enumerate to populate known_vars set */
-    LinkedList domains2 = MmsConnection_getDomainNames(con, &error);
-    if (error != MMS_ERROR_NONE || domains2 == NULL) {
-        fprintf(stderr, "Warning: failed to re-enumerate domains for known_vars: MMS error %d\n", error);
-    } else {
-        LinkedList domainElem2 = LinkedList_getNext(domains2);
-        while (domainElem2 != NULL) {
-            char* domainName = (char*)domainElem2->data;
-
-            LinkedList variables2 = MmsConnection_getDomainVariableNames(con, &error, domainName);
-            if (error != MMS_ERROR_NONE || variables2 == NULL) {
-                fprintf(stderr, "Warning: failed to get variable-list for known_vars in domain %s\n", domainName ? domainName : "(null)");
-            } else {
-                LinkedList varElem2 = LinkedList_getNext(variables2);
-                while (varElem2 != NULL) {
-                    char* varName = (char*)varElem2->data;
-
-                    if (!is_ignored(varName)) {
-                        zeek_write_known_var(zf, domainName, varName, &zeek_first_known_var);
-                    }
-
-                    varElem2 = LinkedList_getNext(varElem2);
+    LinkedList vmd_vars = MmsConnection_getVMDVariableNames(con, &error);
+    if (error == MMS_ERROR_NONE && vmd_vars != NULL) {
+        LinkedList vmdVarElem = LinkedList_getNext(vmd_vars);
+        while (vmdVarElem != NULL) {
+            char* varName = (char*)vmdVarElem->data;
+            if (!is_ignored(varName)) {
+                MmsError localErr = MMS_ERROR_NONE;
+                MmsVariableSpecification* spec =
+                    MmsConnection_getVariableAccessAttributes(con, &localErr, NULL, varName);
+                if (localErr != MMS_ERROR_NONE || spec == NULL) {
+                    print_connection_error_and_exit(hostname, tcpPort, localErr, con, "GetVariableAccessAttributes for VMD failed");
                 }
-                LinkedList_destroy(variables2);
+                char mms_type[64];
+                int is_primitive = 0;
+                int value_field_index = -1;
+                if (detect_var_type_custom(spec, mms_type, sizeof(mms_type), &is_primitive, &value_field_index, NULL, varName)) {
+                    zeek_write_var_entry(zf, NULL, varName, mms_type, is_primitive, value_field_index, &zeek_first_var_entry);
+                }
+                MmsVariableSpecification_destroy(spec);
             }
-
-            domainElem2 = LinkedList_getNext(domainElem2);
+            vmdVarElem = LinkedList_getNext(vmdVarElem);
         }
-        LinkedList_destroy(domains2);
+        LinkedList_destroy(vmd_vars);
     }
 
-    /* Tail (functions + handlers) */
     zeek_write_tail(zf);
 
 cleanup:
