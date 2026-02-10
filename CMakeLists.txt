@@ -20,4 +20,21 @@ endif()
 
 target_link_libraries(explore-mms PRIVATE ${IEC61850_LIB} ${HAL_LIB})
 target_include_directories(explore-mms PRIVATE ${IEC61850_INCLUDE_DIR})
-target_link_options(explore-mms PRIVATE -static)
+
+target_compile_options(explore-mms PRIVATE
+    -O2
+    -fpie
+    -fstack-protector-strong
+    -Wformat
+    -Wformat-security
+)
+
+target_compile_definitions(explore-mms PRIVATE
+    _FORTIFY_SOURCE=2
+)
+
+target_link_options(explore-mms PRIVATE
+    -pie
+    -Wl,-z,relro,-z,now
+    -Wl,-z,noexecstack
+)
