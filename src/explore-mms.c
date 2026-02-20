@@ -2,11 +2,44 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <termios.h>
+#include <unistd.h>
+
 #include <iec61850_common.h>
 #include <mms_client_connection.h>
 #include <iso_connection_parameters.h>
 
 #define PROGRAM_VERSION "0.9.3"
+#define MAX_PASSWORD_LEN 256
+
+int is_tty() {
+    return isatty(STDIN_FILENO);
+}
+
+void get_password(char *password, size_t max_len) {
+    struct termios old_term, new_term;
+    int echo_disabled = 0;
+
+    if (is_tty()) {
+        tcgetattr(STDIN_FILENO, &old_term);
+        new_term = old_term;
+        new_term.c_lflag &= ~(ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &new_term);
+        echo_disabled = 1;
+
+        printf("Enter ACSE password: ");
+        fflush(stdout);
+    }
+
+    if (fgets(password, max_len, stdin) != NULL) {
+        password[strcspn(password, "\n")] = '\0';
+    }
+
+    if (echo_disabled) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &old_term);
+        printf("\n");
+    }
+}
 
 static void zeek_fputs_escaped(FILE* f, const char* s)
 {
@@ -495,7 +528,7 @@ static void print_help(const char* prog_name) {
     printf("Options:\n");
     printf("  --help                         Print this help message and exit.\n");
     printf("  --version                      Print program version and exit.\n");
-    printf("  --password PASSWORD            Set the password for ACSE password authentication.\n");
+    printf("  --password                     Get the password for ACSE password authentication from stdin.\n");
     printf("  --remote-ap-title STR          Set remote AP-Title (e.g. '1.1.1.999.1').\n");
     printf("  --remote-ae-qualifier N        Set remote AE-Qualifier (e.g. '12').\n");
     printf("  --remote-p-selector HEX        Set remote Presentation-Selector (e.g. '0x00000001').\n");
@@ -515,7 +548,8 @@ static void print_help(const char* prog_name) {
 int main(int argc, char** argv) {
     char* hostname = NULL;
     int tcpPort = 102;
-    char* password = NULL;
+    int readpwd = 0;
+    char password[MAX_PASSWORD_LEN];
 
     char* remote_ap_title = NULL;
     int remote_ae_qualifier = -1;
@@ -555,13 +589,8 @@ int main(int argc, char** argv) {
             printf("%s version %s\n", argv[0], PROGRAM_VERSION);
             return EXIT_SUCCESS;
         } else if (strcmp(argv[argidx], "--password") == 0) {
-            if ((argidx + 1) < argc) {
-                password = argv[argidx + 1];
-                argidx += 2;
-            } else {
-                fprintf(stderr, "Error: --password requires a value.\n");
-                return EXIT_FAILURE;
-            }
+            readpwd = 1;
+            argidx += 1;
         } else if (strcmp(argv[argidx], "--remote-ap-title") == 0) {
             if ((argidx+1) < argc) {
                 remote_ap_title = argv[argidx + 1];
@@ -661,6 +690,9 @@ int main(int argc, char** argv) {
     }
     if (!hostname)
         hostname = (char*)"localhost";
+
+    if(readpwd)
+        get_password(password, MAX_PASSWORD_LEN);
 
     MmsConnection con = MmsConnection_create();
     IsoConnectionParameters params = MmsConnection_getIsoConnectionParameters(con);
