@@ -91,4 +91,4 @@ explore-mms [--password PASSWORD] [hostname [port]]
 
 The software was developed on behalf of the BSI (Federal Office for Information Security)
 
-Copyright (c) 2025 by DINA-Community BSD 3-Clause. [See License](/COPYING)
+Copyright (c) 2025-2026 by DINA-Community BSD 3-Clause. [See License](/COPYING)
