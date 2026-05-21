@@ -56,7 +56,7 @@ Just copy the generated `explore-mms` binary anywhere and execute it directly.
 The program can be started with the following parameters:
 
 ```sh
-explore-mms [--password PASSWORD] [hostname [port]]
+explore-mms [--password] [hostname [port]]
 ```
 
 #### Options
@@ -64,8 +64,8 @@ explore-mms [--password PASSWORD] [hostname [port]]
 `--help`:
 : Displays the help screen.
 
-`--password PASSWORD`:
-: Uses ACSE password authentication during connection setup.
+`--password`:
+: Read ACSE password from stdin.
 
 #### Arguments
 
